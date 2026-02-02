@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  passwordHash  String?
+  name          String?
+  role          String         @default("USER")
+  magicToken    String?
+  magicTokenExp DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  hostedWebinars  Webinar[]      @relation("HostedWebinars")
+  registrations   Registration[]
+  chatMessages    ChatMessage[]
+  adminLogs       AdminLog[]
+}
+
+model Webinar {
+  id            String         @id @default(uuid())
+  slug          String         @unique
+  title         String
+  description   String?
+  hostId        String
+  host          User           @relation("HostedWebinars", fields: [hostId], references: [id])
+  
+  scheduledAt   DateTime
+  timezone      String         @default("UTC")
+  duration      Int            @default(60)
+  
+  mode          String         @default("RECORDED")
+  videoUrl      String?
+  thumbnailUrl  String?
+  
+  status        String         @default("DRAFT")
+  accentColor   String         @default("#6366f1")
+  
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  
+  state         WebinarState?
+  registrations Registration[]
+  chatMessages  ChatMessage[]
+  automations   Automation[]
+  adminLogs     AdminLog[]
+}
+
+model WebinarState {
+  id                String    @id @default(uuid())
+  webinarId         String    @unique
+  webinar           Webinar   @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  
+  isLive            Boolean   @default(false)
+  startedAt         DateTime?
+  endedAt           DateTime?
+  currentTimestamp  Int       @default(0)
+  viewerCount       Int       @default(0)
+  
+  updatedAt         DateTime  @updatedAt
+}
+
+model Registration {
+  id          String    @id @default(uuid())
+  uniqueLink  String    @unique @default(uuid())
+  
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  
+  webinarId   String
+  webinar     Webinar   @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  
+  name        String
+  email       String
+  phone       String?
+  
+  attended    Boolean   @default(false)
+  attendedAt  DateTime?
+  
+  consent     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  @@unique([email, webinarId])
+}
+
+model ChatMessage {
+  id          String    @id @default(uuid())
+  
+  webinarId   String
+  webinar     Webinar   @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  
+  senderName  String
+  content     String
+  
+  isAutomated Boolean   @default(false)
+  isPinned    Boolean   @default(false)
+  isDeleted   Boolean   @default(false)
+  
+  timestamp   Int       @default(0)
+  createdAt   DateTime  @default(now())
+}
+
+model Automation {
+  id          String    @id @default(uuid())
+  
+  webinarId   String
+  webinar     Webinar   @relation(fields: [webinarId], references: [id], onDelete: Cascade)
+  
+  type        String
+  triggerAt   Int
+  
+  content     String
+  
+  enabled     Boolean   @default(true)
+  executed    Boolean   @default(false)
+  executedAt  DateTime?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model AdminLog {
+  id          String    @id @default(uuid())
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  
+  webinarId   String?
+  webinar     Webinar?  @relation(fields: [webinarId], references: [id], onDelete: SetNull)
+  
+  action      String
+  details     String?
+  ipAddress   String?
+  
+  createdAt   DateTime  @default(now())
+}
