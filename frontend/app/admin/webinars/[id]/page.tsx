@@ -315,7 +315,8 @@ export default function WebinarDetailPage() {
             
             {/* Chat Management Section in Actions */}
             <div className="border rounded-lg p-4 space-y-3">
-              <h3 className="font-medium text-gray-900">Chat Management</h3>
+      <h3 className="font-medium text-gray-900 text-center">Chat Management</h3>
+      
               
               <Button 
                 variant="outline" 
