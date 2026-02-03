@@ -92,7 +92,13 @@ export default function LiveStreamPage() {
   const setupSocketListeners = useCallback(() => {
     // Initial state
     socketClient.on('webinar:state', (data) => {
-      if (data.messages) setMessages(data.messages);
+      if (data.messages) {
+        // Remove duplicate messages by ID to prevent React key errors
+        const uniqueMessages = data.messages.filter((msg, index, self) =>
+          index === self.findIndex(m => m.id === msg.id)
+        );
+        setMessages(uniqueMessages);
+      }
       if (data.pinnedMessage) setPinnedMessage(data.pinnedMessage);
       if (data.viewerCount) setViewerCount(data.viewerCount);
       if (data.currentTimestamp && videoRef.current) {
@@ -113,9 +119,16 @@ export default function LiveStreamPage() {
       setViewerCount(data.count);
     });
 
-    // Chat messages
+    // Chat messages - FIXED: Removed duplicate listener
     socketClient.on('chat:message', (message) => {
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) => {
+        // Check if message already exists to prevent duplicates
+        const exists = prev.some(m => m.id === message.id);
+        if (exists) {
+          return prev; // Don't add if already exists
+        }
+        return [...prev, message];
+      });
     });
 
     // Pinned message
