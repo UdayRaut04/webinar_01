@@ -99,14 +99,20 @@ export class AutomationService {
     }
   }
 
-  private async executeAutomation(automationId: string) {
+   private async executeAutomation(automationId: string) {
     try {
-      const automation = await this.prisma.automation.findUnique({
-        where: { id: automationId },
+      // Try to atomically mark as executed to prevent race conditions
+      const automation = await this.prisma.automation.update({
+        where: { 
+          id: automationId,
+          executed: false  // Only update if not already executed
+        },
+        data: {
+          executed: true,
+          executedAt: new Date(),
+        },
         include: { webinar: true },
       });
-
-      if (!automation || automation.executed) return;
 
       let content: any;
       try {
@@ -133,17 +139,15 @@ export class AutomationService {
           break;
       }
 
-      // Mark as executed
-      await this.prisma.automation.update({
-        where: { id: automationId },
-        data: {
-          executed: true,
-          executedAt: new Date(),
-        },
-      });
-
       console.log(`Executed automation ${automationId} (${automation.type})`);
     } catch (error) {
+      // If we get a PrismaClientKnownRequestError with code 'P2025', 
+      // it means no record was found (likely already executed by another process)
+      if ((error as any).code === 'P2025' || (error as Error).message.includes('No')) {
+        // Record was already executed, this is expected in concurrent scenarios
+        return;
+      }
+      
       console.error('Execute automation error:', error);
     }
   }
