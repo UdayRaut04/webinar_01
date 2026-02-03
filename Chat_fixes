@@ -1,0 +1,143 @@
+Fixes
+Webinar Chat Fixes - Code Changes Summary
+
+Issues Fixed
+✅ Duplicate Messages - Messages now appear exactly once when sent
+✅ Real-Time Sync After Refresh - Chat continues to receive messages after page refresh
+
+Code Changes Made
+1. Backend: Fix Message Broadcasting
+File: 
+backend/src/socket/index.ts
+
+Change: Updated message broadcasting to send to ALL clients including the sender
+
+- // Broadcast to all clients in the room
+- socket.to(`webinar:${socket.webinarId}`).emit('chat:message', {
++ // Broadcast to all clients in the room (including sender)
++ io.to(`webinar:${socket.webinarId}`).emit('chat:message', {
+    id: message.id,
+    senderName: message.senderName,
+    content: message.content,
+    timestamp: message.timestamp,
+    createdAt: message.createdAt,
+    isAutomated: false,
+  });
+Why: socket.to() excludes the sender, but io.to() includes everyone. This ensures the sender receives their message via the socket event, preventing the need for optimistic updates.
+
+2. Frontend: Fix Socket Listener Cleanup
+File: 
+frontend/lib/socket.ts
+
+Change 1: Clear existing listeners before re-registering on reconnection
+
+connect(auth: { token?: string; registrationId?: string; guestName?: string }) {
+    // ... socket initialization ...
++   // Remove all existing listeners before re-registering to prevent duplicates
++   this.socket.removeAllListeners();
++   
+    // Re-register all listeners
+    this.listeners.forEach((callbacks, event) => {
+      callbacks.forEach((callback) => {
+        this.socket?.on(event, callback);
+      });
+    });
+Change 2: Add method to remove all listeners
+
+isConnected() {
+    return this.socket?.connected ?? false;
+  }
++ removeAllListeners() {
++   this.listeners.clear();
++   this.socket?.removeAllListeners();
++ }
+}
+Why: Prevents duplicate event handlers when socket reconnects, which was causing messages to appear multiple times or not at all.
+
+3. Frontend: Add Proper Component Cleanup
+File: 
+frontend/app/live/[id]/page.tsx
+
+Change 1: Clean up listeners on component unmount
+
+useEffect(() => {
+    loadWebinar();
+    
+    return () => {
++     // Clean up all socket listeners when component unmounts
++     socketClient.removeAllListeners();
+      socketClient.disconnect();
+    };
+  }, [params.id]);
+Change 2: Store and call cleanup functions for each listener
+
+const setupSocketListeners = useCallback(() => {
+-   // Initial state
+-   socketClient.on('webinar:state', (data) => {
++   const unsubscribers: (() => void)[] = [];
++
++   unsubscribers.push(
++     socketClient.on('webinar:state', (data) => {
+        // ... handler code ...
+-     });
++     })
++   );
+    
+    // ... repeat for all other listeners ...
+    
++   // Return cleanup function
++   return () => {
++     unsubscribers.forEach((unsub) => unsub());
++   };
+  }, []);
+Why: Properly cleans up event listeners when component unmounts, preventing memory leaks and stale handlers that could cause issues after page refresh.
+
+How to Test
+Prerequisites
+Make sure you have the dependencies installed:
+
+# Install backend dependencies
+cd /Users/sanket_74/Documents/Antigravity/webinar_page_1-main/backend
+npm install
+# Install frontend dependencies
+cd /Users/sanket_74/Documents/Antigravity/webinar_page_1-main/frontend
+npm install
+Start the Servers
+Terminal 1 - Backend:
+
+cd /Users/sanket_74/Documents/Antigravity/webinar_page_1-main/backend
+npm run dev
+Terminal 2 - Frontend:
+
+cd /Users/sanket_74/Documents/Antigravity/webinar_page_1-main/frontend
+npm run dev
+Test Scenarios
+Test 1: Single Message Appears Once
+Open browser to http://localhost:3000
+Navigate to a live webinar
+Send a message in the chat
+✅ Expected: Message appears exactly once
+❌ Previous: Message appeared 2+ times
+Test 2: Real-Time Sync After Refresh
+Open the same webinar in two browser windows
+In Window 1, send a message → should appear in both windows
+In Window 2, refresh the page (F5)
+In Window 1, send another message
+✅ Expected: New message appears in Window 2
+❌ Previous: Messages stopped appearing after refresh
+Test 3: Multiple Users
+Open webinar in 3 different browsers/incognito windows
+Send messages from each browser
+✅ Expected: All messages appear in all browsers in real-time
+✅ Expected: Each message appears exactly once
+Summary
+All three files have been updated to fix the chat issues:
+
+Backend - Messages now broadcast to everyone including sender
+Socket Client - Properly cleans up listeners on reconnect
+Live Page - Properly manages listener lifecycle
+The chat should now work correctly with no duplicate messages and proper real-time sync even after page refresh!
+
+
+Comment
+⌥⌘M
