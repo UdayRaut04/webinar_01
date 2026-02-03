@@ -42,17 +42,17 @@ export default function WebinarDetailPage() {
   const [showAutomated, setShowAutomated] = useState(false); // Show legitimate only by default
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [showChatManagement, setShowChatManagement] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   useEffect(() => {
     loadWebinar();
   }, [params.id]);
 
   useEffect(() => {
-    if (showChatManagement) {
+    if (showChat) {
       loadChat();
     }
-  }, [showChatManagement, params.id]);
+  }, [showChat, params.id]);
 
   useEffect(() => {
     if (showAutomated) {
@@ -159,19 +159,14 @@ export default function WebinarDetailPage() {
 
   // Function to download filtered chat data as CSV
   const downloadFilteredChats = () => {
-    const legitimateMessages = filteredMessages.filter(msg => !msg.isAutomated);
-    if (legitimateMessages.length === 0) {
-      toast.error('No legitimate messages to download');
-      return;
-    }
-
     const csvContent = [
-      ['ID', 'Sender Name', 'Content', 'Created At'],
-      ...legitimateMessages.map(msg => [
+      ['ID', 'Sender Name', 'Content', 'Created At', 'Is Automated'],
+      ...filteredMessages.map(msg => [
         msg.id,
         `"${msg.senderName.replace(/"/g, '""')}"`,
         `"${msg.content.replace(/"/g, '""')}"`,
         msg.createdAt,
+        msg.isAutomated
       ])
     ]
     .map(row => row.join(','))
@@ -187,7 +182,7 @@ export default function WebinarDetailPage() {
     link.click();
     document.body.removeChild(link);
     
-    toast.success(`Downloaded ${legitimateMessages.length} legitimate messages`);
+    toast.success('Chat data downloaded successfully');
   };
 
   if (loading) {
@@ -274,6 +269,155 @@ export default function WebinarDetailPage() {
         </Card>
       </div>
 
+      {/* Chat Section - Integrated into main page */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Chat Management</CardTitle>
+            <div className="flex space-x-2">
+              <Button
+                variant={showChat ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowChat(!showChat)}
+              >
+                {showChat ? "Hide Chat" : "Show Chat"}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {showChat && (
+            <div className="space-y-4">
+              {/* Chat Controls */}
+              <div className="flex flex-wrap gap-2 items-center">
+                <Button
+                  variant={!showAutomated ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowAutomated(false)}
+                >
+                  Show Legitimate Only
+                </Button>
+                <Button
+                  variant={showAutomated ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowAutomated(true)}
+                >
+                  Show All Messages
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={downloadFilteredChats}
+                  disabled={filteredMessages.length === 0}
+                >
+                  Download Legitimate Chats ({filteredMessages.filter(msg => !msg.isAutomated).length})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadChat}
+                >
+                  Refresh Chat
+                </Button>
+              </div>
+
+              {/* Chat Statistics */}
+              <div className="grid grid-cols-4 gap-4 text-center p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="text-2xl font-bold">{messages.length}</div>
+                  <div className="text-sm text-gray-600">Total Messages</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{messages.filter(msg => !msg.isAutomated).length}</div>
+                  <div className="text-sm text-gray-600">Legitimate Chats</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{messages.filter(msg => msg.isAutomated).length}</div>
+                  <div className="text-sm text-gray-600">Automated Messages</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{webinar.state?.viewerCount || 0}</div>
+                  <div className="text-sm text-gray-600">Current Viewers</div>
+                </div>
+              </div>
+
+              {/* Chat Messages Display */}
+              <div className="border rounded-lg max-h-96 overflow-y-auto">
+                {filteredMessages.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    {showAutomated 
+                      ? "No messages found" 
+                      : "No legitimate chat messages found"}
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {filteredMessages.map((message) => (
+                      <div 
+                        key={message.id} 
+                        className={`p-4 ${
+                          message.isAutomated 
+                            ? 'bg-yellow-50' 
+                            : 'bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-medium">{message.senderName}</span>
+                              {message.isAutomated && (
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                                  Automated
+                                </span>
+                              )}
+                              {message.isPinned && (
+                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                  Pinned
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-gray-800 mt-1">{message.content}</p>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {new Date(message.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="flex space-x-1">
+                            {!message.isAutomated && !message.isPinned && (
+                              <button 
+                                onClick={() => handlePinMessage(message.id)}
+                                className="text-blue-600 hover:text-blue-800 text-sm"
+                                title="Pin message"
+                              >
+                                📌
+                              </button>
+                            )}
+                            {!message.isAutomated && message.isPinned && (
+                              <button 
+                                onClick={() => handleUnpinMessage(message.id)}
+                                className="text-green-600 hover:text-green-800 text-sm"
+                                title="Unpin message"
+                              >
+                                📎
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => handleDeleteMessage(message.id)}
+                              className="text-red-600 hover:text-red-800 text-sm"
+                              title="Delete message"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
@@ -306,101 +450,12 @@ export default function WebinarDetailPage() {
             <CardTitle>Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Link href={`/admin/webinars/${webinar.id}/edit`} className="block">
-              <Button variant="outline" className="w-full">Edit Webinar</Button>
-            </Link>
+           <Link href={`/admin/webinars/${webinar.id}/edit`} className="block">
+  <Button variant="outline" className="w-full">Edit Webinar</Button>
+</Link>
             <Link href={`/admin/webinars/${webinar.id}/automations`} className="block">
               <Button variant="outline" className="w-full">Manage Automations</Button>
             </Link>
-            
-            {/* Chat Management Section in Actions */}
-            <div className="border rounded-lg p-4 space-y-3">
-      <h3 className="font-medium text-gray-900 text-center">Chat Management</h3>
-      
-              
-              <Button 
-                variant="outline" 
-                className="w-full"
-                onClick={() => setShowChatManagement(!showChatManagement)}
-              >
-                {showChatManagement ? "Hide Chat Management" : "Show Chat Management"}
-              </Button>
-              
-              {showChatManagement && (
-                <div className="space-y-3 pt-2 border-t">
-                  {/* Chat Controls */}
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant={!showAutomated ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setShowAutomated(false)}
-                    >
-                      Legitimate Only
-                    </Button>
-                    <Button
-                      variant={showAutomated ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setShowAutomated(true)}
-                    >
-                      Show All
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={downloadFilteredChats}
-                      disabled={filteredMessages.filter(msg => !msg.isAutomated).length === 0}
-                    >
-                      Download ({filteredMessages.filter(msg => !msg.isAutomated).length})
-                    </Button>
-                  </div>
-
-                  {/* Chat Preview/Stats */}
-                  <div className="text-sm space-y-1">
-                    <div className="flex justify-between">
-                      <span>Total Messages:</span>
-                      <span className="font-medium">{messages.length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Legitimate Chats:</span>
-                      <span className="font-medium">{messages.filter(msg => !msg.isAutomated).length}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Automated Messages:</span>
-                      <span className="font-medium">{messages.filter(msg => msg.isAutomated).length}</span>
-                    </div>
-                  </div>
-
-                  {/* Recent Messages Preview */}
-                  {filteredMessages.length > 0 && (
-                    <div className="max-h-32 overflow-y-auto border rounded p-2 text-sm space-y-1">
-                      {filteredMessages.slice(0, 5).map((message) => (
-                        <div key={message.id} className={`p-2 rounded ${message.isAutomated ? 'bg-yellow-50' : 'bg-white'}`}>
-                          <div className="flex justify-between items-start">
-                            <span className="font-medium text-xs">{message.senderName}</span>
-                            {!message.isAutomated && (
-                              <button 
-                                onClick={() => handleDeleteMessage(message.id)}
-                                className="text-red-500 hover:text-red-700 text-xs"
-                                title="Delete message"
-                              >
-                                🗑️
-                              </button>
-                            )}
-                          </div>
-                          <p className="text-gray-700 text-xs truncate">{message.content}</p>
-                        </div>
-                      ))}
-                      {filteredMessages.length > 5 && (
-                        <div className="text-center text-xs text-gray-500 py-1">
-                          +{filteredMessages.length - 5} more messages
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
             <Link href={`/webinar/${webinar.slug}/register`} target="_blank" className="block">
               <Button variant="outline" className="w-full">Preview Registration Page</Button>
             </Link>
