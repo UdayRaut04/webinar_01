@@ -188,36 +188,40 @@ router.post('/automations/csv', upload.single('csv'), async (req: AuthRequest, r
     
     const automations = [];
     
-    // Replace the CSV parsing section with:
-for (const line of lines) {
-  const [hour, minute, second, name, role, message, mode] = line.split(',');
-  
-  if (!hour || !minute || !second || !message) continue;
-  
-  const triggerAt = (parseInt(hour) * 3600) + (parseInt(minute) * 60) + parseInt(second);
-  
-  const automation = await prisma.automation.create({
-    data: {
-      webinarId,
-      type: mode?.trim() === 'CTA' ? 'CTA_POPUP' : 'TIMED_MESSAGE',
-      triggerAt,
-      content: JSON.stringify({
-        senderName: name?.trim() || 'System',  // Use name column
-        message: message?.trim() || '',        // Use message column
-        ...(mode?.trim() === 'CTA' && {
-          title: 'Special Offer',
-          description: message?.trim() || '',
-          buttonText: 'Learn More',
-          buttonUrl: '#'
-        })
-      }),
-      enabled: true,
-    },
-  });
-  
-  automations.push(automation);
-}
+    // Clear existing automations for this webinar to prevent duplicates
+    await prisma.automation.deleteMany({
+      where: { webinarId }
+    });
+    
+    for (const line of lines) {
+      const [hour, minute, second, name, role, message, mode] = line.split(',');
       
+      if (!hour || !minute || !second || !message) continue;
+      
+      const triggerAt = (parseInt(hour) * 3600) + (parseInt(minute) * 60) + parseInt(second);
+      
+      const automation = await prisma.automation.create({
+        data: {
+          webinarId,
+          type: mode?.trim() === 'CTA' ? 'CTA_POPUP' : 'TIMED_MESSAGE',
+          triggerAt,
+          content: JSON.stringify({
+            senderName: name?.trim() || 'System',  // Use name column
+            message: message?.trim() || '',        // Use message column
+            ...(mode?.trim() === 'CTA' && {
+              title: 'Special Offer',
+              description: message?.trim() || '',
+              buttonText: 'Learn More',
+              buttonUrl: '#'
+            })
+          }),
+          enabled: true,
+          executed: false, // Ensure not executed initially
+        },
+      });
+      
+      automations.push(automation);
+    }
     
     // Clean up temp file
     fs.unlinkSync(file.path);
@@ -228,6 +232,7 @@ for (const line of lines) {
     res.status(500).json({ error: 'Failed to process CSV' });
   }
 });
+
 // Get chat messages
 router.get('/webinars/:id/chat', async (req: AuthRequest, res: Response) => {
   try {

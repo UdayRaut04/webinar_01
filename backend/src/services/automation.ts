@@ -99,7 +99,7 @@ export class AutomationService {
     }
   }
 
-   private async executeAutomation(automationId: string) {
+     private async executeAutomation(automationId: string) {
     try {
       // Try to atomically mark as executed to prevent race conditions
       const automation = await this.prisma.automation.update({
@@ -145,26 +145,27 @@ export class AutomationService {
       // it means no record was found (likely already executed by another process)
       if ((error as any).code === 'P2025' || (error as Error).message.includes('No')) {
         // Record was already executed, this is expected in concurrent scenarios
+        console.log(`Automation ${automationId} already executed by another process`);
         return;
       }
       
       console.error('Execute automation error:', error);
     }
   }
-
-  private async sendTimedMessage(webinarId: string, content: any) {
-    // Check if this specific message has already been sent recently to prevent duplicates
-    const messageKey = `${webinarId}:${content.senderName || 'Webinar Bot'}:${content.message || content}`;
-    const cacheKey = `sent_msg:${messageKey}`;
+    private async sendTimedMessage(webinarId: string, content: any) {
+    // Create a unique identifier for this specific message to prevent duplicates
+    const messageSignature = `${webinarId}:${content.senderName || 'Webinar Bot'}:${content.message || content}`;
+    const cacheKey = `sent_msg:${encodeURIComponent(messageSignature)}`;
     
-    // Try to set a flag in Redis to prevent duplicate sending (with 1-second expiration)
-    const wasSet = await this.redis.set(cacheKey, '1', 'EX', 1, 'NX'); // NX means only set if not exists
-    
-    // If the key already existed, this is a duplicate message - skip sending
-    if (!wasSet) {
-      console.log(`Duplicate timed message detected and skipped: ${messageKey}`);
-      return;
+    // Check if this message was recently sent (within 1 second) to prevent duplicates
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      console.log(`Skipping duplicate timed message: ${messageSignature}`);
+      return; // Message already sent recently, skip
     }
+    
+    // Cache this message signature for 1 second to prevent duplicates
+    await this.redis.setex(cacheKey, 1, '1');
 
     const message = await this.prisma.chatMessage.create({
       data: {
@@ -185,6 +186,7 @@ export class AutomationService {
       isAutomated: true,
     });
   }
+
   private async sendCTAPopup(webinarId: string, content: any) {
     this.io.to(`webinar:${webinarId}`).emit('automation:cta', {
       type: 'CTA_POPUP',
