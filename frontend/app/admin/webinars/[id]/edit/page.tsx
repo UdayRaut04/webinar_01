@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getVideoUrl } from '@/lib/utils';
+import { useRef } from 'react';
 
 interface Webinar {
   id: string;
@@ -26,6 +28,10 @@ export default function EditWebinarPage() {
   const params = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryFiles, setLibraryFiles] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -61,6 +67,38 @@ export default function EditWebinarPage() {
       router.push('/admin/webinars');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024 * 1024) {
+      toast.error('File too large (max 500MB)');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const { url } = await api.uploadFile(file);
+      setFormData({ ...formData, videoUrl: url });
+      toast.success('Video uploaded successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload video');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const loadLibrary = async () => {
+    try {
+      const { files } = await api.getUploadedFiles();
+      setLibraryFiles(files);
+      setShowLibrary(true);
+    } catch (error: any) {
+      toast.error('Failed to load library');
     }
   };
 
@@ -112,12 +150,76 @@ export default function EditWebinarPage() {
               rows={4}
             />
 
-            <Input
-              label="Video URL"
-              placeholder="https://example.com/video.mp4 or YouTube URL"
-              value={formData.videoUrl}
-              onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
-            />
+            <div className="space-y-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Input
+                    label="Video Source"
+                    placeholder="https://example.com/video.mp4 or /uploads/..."
+                    value={formData.videoUrl}
+                    onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
+                  />
+                </div>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept="video/mp4,video/webm,video/ogg"
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  loading={uploading}
+                >
+                  Upload MP4
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={loadLibrary}
+                >
+                  Library
+                </Button>
+              </div>
+
+              {showLibrary && (
+                <div className="p-4 border rounded bg-gray-50 max-h-48 overflow-y-auto space-y-2">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-xs font-bold uppercase text-gray-500">Select from Server Library</p>
+                    <button onClick={() => setShowLibrary(false)} className="text-xs text-gray-400 hover:text-gray-600">Close</button>
+                  </div>
+                  {libraryFiles.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">No files in library</p>
+                  ) : (
+                    libraryFiles.map(file => (
+                      <div 
+                        key={file} 
+                        className="flex justify-between items-center p-2 hover:bg-white rounded border border-transparent hover:border-gray-200 cursor-pointer text-sm"
+                        onClick={() => {
+                          setFormData({ ...formData, videoUrl: file });
+                          setShowLibrary(false);
+                        }}
+                      >
+                        <span className="truncate">{file.split('/').pop()}</span>
+                        <span className="text-xs text-blue-500">Select</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+              {formData.videoUrl && (
+                <div className="mt-2 text-sm">
+                  <p className="text-gray-500 mb-1">Preview:</p>
+                  <video
+                    src={getVideoUrl(formData.videoUrl)}
+                    className="w-full aspect-video bg-black rounded border"
+                    controls
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Input

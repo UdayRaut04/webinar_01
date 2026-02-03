@@ -238,6 +238,31 @@ class ApiClient {
     const query = webinarId ? `?webinarId=${webinarId}` : '';
     return this.request<{ logs: any[] }>(`/api/admin/logs${query}`);
   }
+
+  async uploadFile(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = this.getToken();
+    const response = await fetch(`${API_URL}/api/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Upload failed');
+    }
+
+    return data as { url: string; filename: string; mimetype: string; size: number };
+  }
+
+  async getUploadedFiles() {
+    return this.request<{ files: string[] }>('/api/upload/files');
+  }
 }
 
 export const api = new ApiClient();

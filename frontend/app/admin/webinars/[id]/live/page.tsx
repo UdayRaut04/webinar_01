@@ -9,7 +9,8 @@ import { useAuth } from '@/context/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatTime } from '@/lib/utils';
+import { formatTime, getVideoUrl } from '@/lib/utils';
+import { useMemo } from 'react';
 
 interface Message {
   id: string;
@@ -35,9 +36,10 @@ export default function AdminLiveControlPage() {
     duration: 30,
   });
   const [chatMessage, setChatMessage] = useState('');
-  
+    
   const videoRef = useRef<HTMLVideoElement>(null);
-
+  const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
+  
   useEffect(() => {
     loadData();
     
@@ -188,7 +190,7 @@ export default function AdminLiveControlPage() {
                 <video
                   ref={videoRef}
                   className="w-full h-full object-contain"
-                  src={webinar.videoUrl}
+                  src={videoUrl}
                   controls
                 />
                 <div className="absolute bottom-4 left-4 px-2 py-1 bg-black/50 text-white text-sm rounded">

@@ -100,7 +100,7 @@ router.post(
     body('timezone').optional().default('UTC'),
     body('duration').optional().isInt({ min: 1 }).default(60),
     body('mode').optional().isIn(['LIVE', 'RECORDED', 'HYBRID']),
-    body('videoUrl').optional().isURL(),
+    body('videoUrl').optional().trim(),
     body('accentColor').optional().matches(/^#[0-9A-Fa-f]{6}$/),
   ],
   async (req: AuthRequest, res: Response) => {

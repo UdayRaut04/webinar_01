@@ -13,6 +13,7 @@ import authRoutes from './routes/auth';
 import webinarRoutes from './routes/webinars';
 import adminRoutes from './routes/admin';
 import registrationRoutes from './routes/registrations';
+import uploadRoutes from './routes/upload';
 import { setupSocketHandlers } from './socket/index';
 import { AutomationService } from './services/automation';
 
@@ -60,6 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/webinars', webinarRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/registrations', registrationRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Setup WebSocket handlers
 setupSocketHandlers(io);

@@ -6,7 +6,8 @@ import { api } from '@/lib/api';
 import { socketClient } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatTime } from '@/lib/utils';
+import { formatTime, getVideoUrl } from '@/lib/utils';
+import { useMemo } from 'react';
 
 interface Message {
   id: string;
@@ -51,6 +52,8 @@ export default function LiveStreamPage() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
 
   useEffect(() => {
     loadWebinar();
@@ -211,7 +214,7 @@ export default function LiveStreamPage() {
           <video
             ref={videoRef}
             className="w-full h-full object-contain"
-            src={webinar.videoUrl}
+            src={videoUrl}
             autoPlay
             playsInline
             controls={false}

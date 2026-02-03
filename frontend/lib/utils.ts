@@ -47,3 +47,19 @@ export function generateSlug(title: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 }
+
+export function getVideoUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
+    return url;
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  
+  // Handle local absolute paths (Windows C:\ or Unix /)
+  if (/^[a-zA-Z]:\\/.test(url) || /^[a-zA-Z]:\//.test(url) || (url.startsWith('/') && !url.startsWith('/uploads'))) {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    return `${baseUrl}/api/upload/local?path=${encodeURIComponent(url)}${token ? `&token=${token}` : ''}`;
+  }
+
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+}
