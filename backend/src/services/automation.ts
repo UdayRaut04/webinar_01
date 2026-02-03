@@ -153,6 +153,19 @@ export class AutomationService {
   }
 
   private async sendTimedMessage(webinarId: string, content: any) {
+    // Check if this specific message has already been sent recently to prevent duplicates
+    const messageKey = `${webinarId}:${content.senderName || 'Webinar Bot'}:${content.message || content}`;
+    const cacheKey = `sent_msg:${messageKey}`;
+    
+    // Try to set a flag in Redis to prevent duplicate sending (with 1-second expiration)
+    const wasSet = await this.redis.set(cacheKey, '1', 'EX', 1, 'NX'); // NX means only set if not exists
+    
+    // If the key already existed, this is a duplicate message - skip sending
+    if (!wasSet) {
+      console.log(`Duplicate timed message detected and skipped: ${messageKey}`);
+      return;
+    }
+
     const message = await this.prisma.chatMessage.create({
       data: {
         webinarId,
@@ -172,7 +185,6 @@ export class AutomationService {
       isAutomated: true,
     });
   }
-
   private async sendCTAPopup(webinarId: string, content: any) {
     this.io.to(`webinar:${webinarId}`).emit('automation:cta', {
       type: 'CTA_POPUP',
