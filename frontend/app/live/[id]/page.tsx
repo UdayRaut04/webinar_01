@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { socketClient } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { formatTime, getVideoUrl } from '@/lib/utils';
+import { formatTime, getVideoUrl, isYouTubeUrl } from '@/lib/utils';
 import { useMemo } from 'react';
 
 interface Message {
@@ -37,6 +37,7 @@ interface Webinar {
 export default function LiveStreamPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const registrationLink = searchParams.get('link');
   
   const [webinar, setWebinar] = useState<Webinar | null>(null);
@@ -52,8 +53,28 @@ export default function LiveStreamPage() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
+  const [isMuted, setIsMuted] = useState(false); // Start with unmuted by default
 
   const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
+  const isYouTube = useMemo(() => webinar?.videoUrl ? isYouTubeUrl(webinar.videoUrl) : false, [webinar?.videoUrl]);
+
+  // Disable keyboard shortcuts for developer tools and other actions
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
+        (e.ctrlKey && e.key === 'u')
+      ) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     loadWebinar();
@@ -67,6 +88,13 @@ export default function LiveStreamPage() {
     try {
       const { webinar } = await api.getWebinar(params.id as string);
       setWebinar(webinar);
+      
+      // Check if webinar has already ended
+      if (webinar.status === 'ENDED') {
+        const title = encodeURIComponent(webinar.title || 'the webinar');
+        router.push(`/webinar-ended?title=${title}`);
+        return;
+      }
 
       // Get user name from registration
       if (registrationLink) {
@@ -92,6 +120,13 @@ export default function LiveStreamPage() {
     }
   };
 
+  // Update video muted state when isMuted changes
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
   const setupSocketListeners = useCallback(() => {
     // Initial state
     socketClient.on('webinar:state', (data) => {
@@ -106,6 +141,10 @@ export default function LiveStreamPage() {
       if (data.viewerCount) setViewerCount(data.viewerCount);
       if (data.currentTimestamp && videoRef.current) {
         videoRef.current.currentTime = data.currentTimestamp;
+        // Autoplay when webinar state is received
+        videoRef.current.play().catch(err => {
+          console.log('Autoplay prevented:', err);
+        });
       }
     });
 
@@ -114,6 +153,12 @@ export default function LiveStreamPage() {
       setCurrentTime(data.currentTimestamp);
       if (videoRef.current && Math.abs(videoRef.current.currentTime - data.currentTimestamp) > 2) {
         videoRef.current.currentTime = data.currentTimestamp;
+        // Ensure video is playing during sync
+        if (videoRef.current.paused) {
+          videoRef.current.play().catch(err => {
+            console.log('Autoplay prevented:', err);
+          });
+        }
       }
     });
 
@@ -165,8 +210,13 @@ export default function LiveStreamPage() {
     });
 
     // Webinar ended
-    socketClient.on('webinar:ended', () => {
-      alert('This webinar has ended. Thank you for attending!');
+    socketClient.on('webinar:ended', (data) => {
+      console.log('Received webinar:ended event', data);
+      // Update webinar status to ENDED
+      setWebinar(prev => prev ? { ...prev, state: { ...prev.state, isLive: false } } : null);
+      // Redirect to thank you page with webinar title
+      const title = encodeURIComponent(webinar?.title || 'the webinar');
+      router.push(`/webinar-ended?title=${title}`);
     });
   }, []);
 
@@ -206,22 +256,44 @@ export default function LiveStreamPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col lg:flex-row">
+    <div 
+      className="min-h-screen bg-gray-900 flex flex-col lg:flex-row select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
       {/* Video Section */}
       <div className="flex-1 flex flex-col">
         {/* Video Player */}
         <div className="relative aspect-video bg-black">
-          <video
-            ref={videoRef}
-            className="w-full h-full object-contain"
-            src={videoUrl}
-            autoPlay
-            playsInline
-            controls={false}
-          />
+          {isYouTube ? (
+            <div className="relative w-full h-full">
+              <iframe
+                className="w-full h-full"
+                src={`${videoUrl}${videoUrl.includes('?') ? '&' : '?'}autoplay=1&controls=0&disablekb=1&fs=0&modestbranding=1&rel=0&muted=${isMuted ? '1' : '0'}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen={false}
+              />
+            </div>
+          ) : (
+            <video
+              ref={videoRef}
+              className="w-full h-full object-contain"
+              src={videoUrl}
+              autoPlay
+              muted={isMuted}
+              playsInline
+              controls={false}
+              controlsList="nodownload nofullscreen noremoteplayback"
+              disablePictureInPicture
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          )}
           
           {/* Live indicator */}
-          <div className="absolute top-4 left-4 flex items-center space-x-2">
+          <div className="absolute top-4 left-4 flex items-center space-x-2 z-20">
             <span className="flex items-center px-2 py-1 bg-red-600 text-white text-xs font-medium rounded">
               <span className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse" />
               LIVE
@@ -230,10 +302,34 @@ export default function LiveStreamPage() {
               {viewerCount} watching
             </span>
           </div>
+          
+          {/* View-only watermark */}
+          <div className="absolute top-4 right-4 px-2 py-1 bg-black/50 text-white/70 text-xs rounded z-20 select-none pointer-events-none">
+            🔒 View Only
+          </div>
 
           {/* Time */}
           <div className="absolute bottom-4 left-4 px-2 py-1 bg-black/50 text-white text-sm rounded">
             {formatTime(currentTime)}
+          </div>
+
+          {/* Mute/Unmute Button */}
+          <div className="absolute bottom-4 right-4">
+            <button
+              onClick={() => setIsMuted(!isMuted)}
+              className="p-2 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
+              aria-label={isMuted ? 'Unmute' : 'Mute'}
+            >
+              {isMuted ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A4.983 4.983 0 0115 10a4.984 4.984 0 01-1.757 3.536 1 1 0 01-1.415-1.414A2.984 2.984 0 0013 10a2.984 2.984 0 00-1.029-2.122 1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
           </div>
 
           {/* Reactions overlay */}

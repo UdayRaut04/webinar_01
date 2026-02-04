@@ -9,7 +9,7 @@ import { useAuth } from '@/context/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatTime, getVideoUrl } from '@/lib/utils';
+import { formatTime, getVideoUrl, isYouTubeUrl } from '@/lib/utils';
 import { useMemo } from 'react';
 
 interface Message {
@@ -39,6 +39,7 @@ export default function AdminLiveControlPage() {
     
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
+  const isYouTube = useMemo(() => webinar?.videoUrl ? isYouTubeUrl(webinar.videoUrl) : false, [webinar?.videoUrl]);
   
   useEffect(() => {
     loadData();
@@ -56,7 +57,11 @@ export default function AdminLiveControlPage() {
       ]);
       
       setWebinar(webinarRes.webinar);
-      setMessages(chatRes.messages);
+      // Get unique messages by ID to prevent duplicates
+      const uniqueMessages = chatRes.messages.filter((msg, index, self) =>
+        index === self.findIndex(m => m.id === msg.id)
+      );
+      setMessages(uniqueMessages);
 
       // Connect as admin
       const token = api.getToken();
@@ -86,13 +91,33 @@ export default function AdminLiveControlPage() {
     });
 
     socketClient.on('chat:message', (message: Message) => {
-      setMessages((prev) => [...prev, message]);
+      setMessages((prev) => {
+        // Check if message already exists to prevent duplicates
+        const exists = prev.some(m => m.id === message.id);
+        if (exists) return prev;
+        return [...prev, message];
+      });
     });
 
     socketClient.on('chat:deleted', (data: { messageId: string }) => {
       setMessages((prev) => prev.filter((m) => m.id !== data.messageId));
     });
+
+    socketClient.on('webinar:ended', () => {
+      // Optionally redirect admin to dashboard or show notification
+      // In admin view, we'll keep them on the page to monitor
+      console.log('Webinar has ended');
+    });
   };
+
+  // Autoplay video when component mounts (for admin)
+  useEffect(() => {
+    if (videoRef.current && !isYouTube && webinar?.status === 'LIVE') {
+      videoRef.current.play().catch(err => {
+        console.log('Autoplay prevented:', err);
+      });
+    }
+  }, [webinar, isYouTube]);
 
   const handleSendCTA = async () => {
     try {
@@ -187,15 +212,32 @@ export default function AdminLiveControlPage() {
           <Card>
             <CardContent className="p-0">
               <div className="relative aspect-video bg-black rounded-t-xl overflow-hidden">
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-contain"
-                  src={videoUrl}
-                  controls
-                />
-                <div className="absolute bottom-4 left-4 px-2 py-1 bg-black/50 text-white text-sm rounded">
-                  {formatTime(currentTime)}
-                </div>
+                {isYouTube ? (
+                  <div className="w-full h-full">
+                    <iframe
+                      className="w-full h-full"
+                      src={`${videoUrl}${videoUrl.includes('?') ? '&' : '?'}autoplay=1`}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                    <div className="absolute bottom-4 left-4 px-3 py-2 bg-yellow-500/90 text-white text-xs rounded">
+                      ⚠️ YouTube videos: Use YouTube Studio for live streaming control
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-contain"
+                      src={videoUrl}
+                      autoPlay
+                      controls
+                    />
+                    <div className="absolute bottom-4 left-4 px-2 py-1 bg-black/50 text-white text-sm rounded">
+                      {formatTime(currentTime)}
+                    </div>
+                  </>
+                )}
               </div>
               <div className="p-4 flex items-center justify-between">
                 <span className="text-sm text-gray-600">
