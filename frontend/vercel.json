@@ -1,0 +1,10 @@
+{
+    "buildCommand": "npm run build",
+    "outputDirectory": ".next",
+    "installCommand": "npm install",
+    "framework": "nextjs",
+    "env": {
+        "NEXT_PUBLIC_API_URL": "https://webinar-01-1.onrender.com",
+        "NEXT_PUBLIC_WS_URL": "wss://webinar-01-1.onrender.com"
+    }
+}
