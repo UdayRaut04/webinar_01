@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { socketClient } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
@@ -46,6 +47,35 @@ export default function WebinarDetailPage() {
 
   useEffect(() => {
     loadWebinar();
+    
+    // Connect to webinar socket to receive real-time updates
+    const token = api.getToken();
+    socketClient.connect({ token });
+    socketClient.joinWebinar(params.id as string);
+    
+    let webinarStartedCleanup: (() => void) | null = null;
+    let webinarEndedCleanup: (() => void) | null = null;
+    
+    // Listen for webinar status changes
+    webinarStartedCleanup = socketClient.on('webinar:started', (data) => {
+      console.log('Webinar started event received:', data);
+      loadWebinar(); // Refresh webinar data when webinar starts
+    });
+    
+    webinarEndedCleanup = socketClient.on('webinar:ended', (data) => {
+      console.log('Webinar ended event received:', data);
+      loadWebinar(); // Refresh webinar data when webinar ends
+    });
+    
+    // Set up auto-refresh every 30 seconds as backup
+    const interval = setInterval(loadWebinar, 30000);
+    
+    return () => {
+      clearInterval(interval);
+      webinarStartedCleanup?.();
+      webinarEndedCleanup?.();
+      // Note: socket is kept connected for other admin functions
+    };
   }, [params.id]);
 
   useEffect(() => {

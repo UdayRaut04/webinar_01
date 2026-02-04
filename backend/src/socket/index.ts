@@ -110,8 +110,18 @@ export function setupSocketHandlers(io: Server) {
       const roomSize = io.sockets.adapter.rooms.get(`webinar:${webinarId}`)?.size || 0;
       await redis.set(`webinar:${webinarId}:viewers`, roomSize.toString());
 
+      // Get fake viewers count from Redis
+      let fakeViewers = 0;
+      const fakeViewersStr = await redis.get(`webinar:${webinarId}:fakeViewers`);
+      if (fakeViewersStr) {
+        fakeViewers = parseInt(fakeViewersStr);
+      }
+
+      // Calculate total viewers (real + fake)
+      const totalViewers = roomSize + fakeViewers;
+
       // Broadcast updated viewer count
-      io.to(`webinar:${webinarId}`).emit('webinar:viewers', { count: roomSize });
+      io.to(`webinar:${webinarId}`).emit('webinar:viewers', { count: totalViewers });
 
       // Get recent chat messages
       const messages = await prisma.chatMessage.findMany({
@@ -137,6 +147,99 @@ export function setupSocketHandlers(io: Server) {
       });
 
       console.log(`${socket.user?.name} joined webinar ${webinarId}`);
+    });
+
+    // Handle video end event from client
+    socket.on('webinar:videoEnded', async () => {
+      if (!socket.webinarId || !socket.user) return;
+      
+      console.log(`Video ended for webinar ${socket.webinarId}`);
+      
+      try {
+        // Check if auto-end is enabled for this webinar
+        const webinar: any = await prisma.webinar.findUnique({
+          where: { id: socket.webinarId }
+        });
+        
+        // Use default values if fields don't exist (fallback for TS issues)
+        const autoEndEnabled = webinar?.autoEndEnabled ?? true;
+        const autoEndBuffer = webinar?.autoEndBuffer ?? 5;
+        const hostId = webinar?.hostId;
+        
+        if (!autoEndEnabled) {
+          console.log(`Auto-end disabled for webinar ${socket.webinarId}`);
+          return;
+        }
+        
+        // Get buffer time (default 5 seconds)
+        const bufferTime = autoEndBuffer;
+        
+        console.log(`Scheduling webinar end in ${bufferTime} seconds`);
+        
+        // Schedule the webinar end after buffer time
+        setTimeout(async () => {
+          try {
+            // Double-check the webinar is still live
+            const stateStr = await redis.get(`webinar:${socket.webinarId}:state`);
+            if (!stateStr) {
+              console.log(`Webinar ${socket.webinarId} state not found, skipping auto-end`);
+              return;
+            }
+            
+            const state = JSON.parse(stateStr);
+            if (!state.isLive) {
+              console.log(`Webinar ${socket.webinarId} already ended, skipping auto-end`);
+              return;
+            }
+            
+            // Update webinar status to ENDED
+            const updatedWebinar = await prisma.webinar.update({
+              where: { id: socket.webinarId },
+              data: {
+                status: 'ENDED',
+                state: {
+                  update: {
+                    isLive: false,
+                    endedAt: new Date(),
+                  },
+                },
+              },
+              include: { state: true },
+            });
+            
+            // Clear Redis state
+            await redis.del(`webinar:${socket.webinarId}:state`);
+            
+            // Notify all connected clients
+            io.to(`webinar:${socket.webinarId}`).emit('webinar:ended', {
+              webinarId: socket.webinarId,
+              endedAt: new Date().toISOString(),
+              reason: 'VIDEO_ENDED',
+              redirectUrl: `/webinar-ended/${socket.webinarId}?reason=Video finished playing`
+            });
+            
+            // Log action
+            await prisma.adminLog.create({
+              data: {
+                userId: hostId,
+                webinarId: socket.webinarId,
+                action: 'WEBINAR_AUTO_ENDED',
+                details: JSON.stringify({ 
+                  reason: 'Video finished playing',
+                  autoEndBuffer: bufferTime
+                }),
+              },
+            });
+            
+            console.log(`✅ Webinar ${socket.webinarId} automatically ended after video completion`);
+          } catch (error) {
+            console.error('Failed to auto-end webinar:', error);
+          }
+        }, bufferTime * 1000);
+        
+      } catch (error) {
+        console.error('Error handling video end event:', error);
+      }
     });
 
     // Handle chat messages
@@ -221,7 +324,17 @@ socket.to(`webinar:${socket.webinarId}`).emit('chat:message', {
         const roomSize = io.sockets.adapter.rooms.get(`webinar:${socket.webinarId}`)?.size || 0;
         await redis.set(`webinar:${socket.webinarId}:viewers`, roomSize.toString());
 
-        io.to(`webinar:${socket.webinarId}`).emit('webinar:viewers', { count: roomSize });
+        // Get fake viewers count from Redis
+        let fakeViewers = 0;
+        const fakeViewersStr = await redis.get(`webinar:${socket.webinarId}:fakeViewers`);
+        if (fakeViewersStr) {
+          fakeViewers = parseInt(fakeViewersStr);
+        }
+
+        // Calculate total viewers (real + fake)
+        const totalViewers = roomSize + fakeViewers;
+
+        io.to(`webinar:${socket.webinarId}`).emit('webinar:viewers', { count: totalViewers });
       }
     });
 

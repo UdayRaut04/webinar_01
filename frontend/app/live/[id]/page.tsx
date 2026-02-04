@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { socketClient } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,7 @@ interface Webinar {
 export default function LiveStreamPage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const registrationLink = searchParams.get('link');
   
   const [webinar, setWebinar] = useState<Webinar | null>(null);
@@ -54,6 +55,35 @@ export default function LiveStreamPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
+
+  // Disable right-click and F12
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      return false;
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Disable F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U, Ctrl+Shift+C
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
+        (e.ctrlKey && e.key === 'u') ||
+        (e.ctrlKey && e.key === 'U')
+      ) {
+        e.preventDefault();
+        return false;
+      }
+    };
+
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     loadWebinar();
@@ -165,8 +195,25 @@ export default function LiveStreamPage() {
     });
 
     // Webinar ended
-    socketClient.on('webinar:ended', () => {
-      alert('This webinar has ended. Thank you for attending!');
+    socketClient.on('webinar:ended', (data) => {
+      console.log('Webinar ended event received:', data);
+      
+      // Store end reason in localStorage for the ended page
+      if (data.reason) {
+        localStorage.setItem('webinarEndReason', 
+          data.reason === 'VIDEO_ENDED' 
+            ? 'Webinar ended automatically because the video finished playing' 
+            : 'Webinar was ended by the host'
+        );
+      }
+      
+      // Redirect to ended page
+      if (data.redirectUrl) {
+        router.push(data.redirectUrl);
+      } else {
+        // Fallback to manual redirect
+        router.push(`/webinar-ended/${params.id}?reason=${data.reason || 'Webinar ended'}`);
+      }
     });
   }, []);
 
@@ -176,6 +223,24 @@ export default function LiveStreamPage() {
       chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Video end detection
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    const handleVideoEnd = () => {
+      console.log('Video ended, sending event to server');
+      // Send video end event to server
+      socketClient.emit('webinar:videoEnded');
+    };
+
+    videoElement.addEventListener('ended', handleVideoEnd);
+
+    return () => {
+      videoElement.removeEventListener('ended', handleVideoEnd);
+    };
+  }, []);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();

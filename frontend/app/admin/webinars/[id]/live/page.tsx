@@ -36,7 +36,8 @@ export default function AdminLiveControlPage() {
     duration: 30,
   });
   const [chatMessage, setChatMessage] = useState('');
-    
+  const [fakeViewersCount, setFakeViewersCount] = useState(10); // Default to 10 fake viewers
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoUrl = useMemo(() => getVideoUrl(webinar?.videoUrl), [webinar?.videoUrl]);
   
@@ -149,6 +150,20 @@ export default function AdminLiveControlPage() {
     }
   };
 
+  const handleAddFakeViewers = async () => {
+    if (fakeViewersCount <= 0) {
+      toast.error('Number of fake viewers must be greater than 0');
+      return;
+    }
+
+    try {
+      const result = await api.addFakeViewers(params.id as string, fakeViewersCount);
+      toast.success(`Added ${fakeViewersCount} fake viewers. Total viewers: ${result.totalViewers}`);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to add fake viewers');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -209,6 +224,35 @@ export default function AdminLiveControlPage() {
           </Card>
 
           {/* CTA Broadcast */}
+          {/* Fake Viewers Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Fake Viewers</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center space-x-4">
+                <Input
+                  label="Number of Fake Viewers"
+                  type="number"
+                  value={fakeViewersCount.toString()}
+                  onChange={(e) => setFakeViewersCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  min="1"
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={handleAddFakeViewers}
+                  className="self-end"
+                  style={{ backgroundColor: webinar?.accentColor }}
+                >
+                  Add Viewers
+                </Button>
+              </div>
+              <p className="text-sm text-gray-500">
+                Add artificial viewers to increase the viewer count during the webinar.
+              </p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Broadcast CTA Popup</CardTitle>

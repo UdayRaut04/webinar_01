@@ -43,6 +43,10 @@ model Webinar {
   status        String         @default("DRAFT")
   accentColor   String         @default("#6366f1")
   
+  // Auto-end settings
+  autoEndEnabled Boolean       @default(true)  // Enable/disable auto-end feature
+  autoEndBuffer  Int           @default(5)     // Buffer time in seconds after video ends
+  
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   

@@ -263,6 +263,13 @@ class ApiClient {
   async getUploadedFiles() {
     return this.request<{ files: string[] }>('/api/upload/files');
   }
+
+  async addFakeViewers(webinarId: string, count: number) {
+    return this.request<{ success: boolean; totalViewers: number }>(`/api/admin/webinars/${webinarId}/add-viewers`, {
+      method: 'POST',
+      body: { count },
+    });
+  }
 }
 
 export const api = new ApiClient();

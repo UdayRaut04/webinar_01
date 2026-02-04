@@ -126,6 +126,8 @@ router.post('/webinars/:id/stop', async (req: AuthRequest, res: Response) => {
     io.to(`webinar:${id}`).emit('webinar:ended', {
       webinarId: id,
       endedAt: new Date().toISOString(),
+      reason: 'MANUALLY_ENDED',
+      redirectUrl: `/webinar-ended/${id}?reason=Webinar was ended by host`
     });
 
     // Log action
@@ -456,6 +458,44 @@ router.post('/webinars/:id/cta', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('CTA broadcast error:', error);
     res.status(500).json({ error: 'Failed to broadcast CTA' });
+  }
+});
+
+// Add fake viewers
+router.post('/webinars/:id/add-viewers', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { count } = req.body;
+
+    if (!count || count <= 0) {
+      return res.status(400).json({ error: 'Count must be a positive number' });
+    }
+
+    // Get current fake viewers count from Redis
+    let fakeViewers = 0;
+    const fakeViewersStr = await redis.get(`webinar:${id}:fakeViewers`);
+    if (fakeViewersStr) {
+      fakeViewers = parseInt(fakeViewersStr);
+    }
+
+    // Add to the fake viewers count
+    fakeViewers += count;
+    await redis.set(`webinar:${id}:fakeViewers`, fakeViewers.toString());
+
+    // Get current real viewers count
+    const realViewersStr = await redis.get(`webinar:${id}:viewers`);
+    const realViewers = realViewersStr ? parseInt(realViewersStr) : 0;
+
+    // Calculate total viewers
+    const totalViewers = realViewers + fakeViewers;
+
+    // Broadcast updated viewer count to all clients
+    io.to(`webinar:${id}`).emit('webinar:viewers', { count: totalViewers });
+
+    res.json({ success: true, totalViewers });
+  } catch (error) {
+    console.error('Add fake viewers error:', error);
+    res.status(500).json({ error: 'Failed to add fake viewers' });
   }
 });
 

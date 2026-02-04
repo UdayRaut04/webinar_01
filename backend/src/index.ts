@@ -16,6 +16,7 @@ import registrationRoutes from './routes/registrations';
 import uploadRoutes from './routes/upload';
 import { setupSocketHandlers } from './socket/index';
 import { AutomationService } from './services/automation';
+import { SchedulerService } from './services/scheduler';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -70,6 +71,10 @@ setupSocketHandlers(io);
 const automationService = new AutomationService(io, prisma, redis);
 automationService.start();
 
+// Initialize Scheduler Service
+const schedulerService = new SchedulerService(io, prisma, redis);
+schedulerService.start();
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
@@ -91,6 +96,7 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down...');
+  schedulerService.stop();
   await prisma.$disconnect();
   redis.disconnect();
   server.close(() => {
