@@ -50,6 +50,57 @@ export function generateSlug(title: string): string {
 
 export function getVideoUrl(url: string | null | undefined): string {
   if (!url) return '';
+  
+  // Handle YouTube links - convert to embed format
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    // Extract video ID from various YouTube URL formats
+    let videoId = '';
+    let existingParams = '';
+    
+    if (url.includes('youtube.com/watch')) {
+      const parts = url.split('?');
+      const urlParams = new URLSearchParams(parts[1]);
+      videoId = urlParams.get('v') || '';
+      // Preserve existing parameters
+      urlParams.delete('v');
+      existingParams = urlParams.toString();
+    } else if (url.includes('youtube.com/embed/')) {
+      const parts = url.split('youtube.com/embed/')[1]?.split('?');
+      videoId = parts?.[0] || '';
+      existingParams = parts?.[1] || '';
+    } else if (url.includes('youtu.be/')) {
+      const parts = url.split('youtu.be/')[1]?.split('?');
+      videoId = parts?.[0] || '';
+      existingParams = parts?.[1] || '';
+    }
+    
+    if (videoId) {
+      // Build embed URL with parameters
+      const params = new URLSearchParams(existingParams);
+      
+      // Only add if not already present
+      if (!params.has('hl')) params.set('hl', 'original');
+      if (!params.has('cc_load_policy')) params.set('cc_load_policy', '0');
+      
+      const paramString = params.toString();
+      return `https://www.youtube.com/embed/${videoId}${paramString ? '?' + paramString : ''}`;
+    }
+  }
+  
+  // Handle Google Drive links
+  if (url.includes('drive.google.com')) {
+    // Extract file ID from various Google Drive URL formats
+    const fileIdMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || 
+                        url.match(/id=([a-zA-Z0-9_-]+)/) ||
+                        url.match(/\/open\?id=([a-zA-Z0-9_-]+)/);
+    
+    if (fileIdMatch && fileIdMatch[1]) {
+      const fileId = fileIdMatch[1];
+      // Convert to direct download link
+      return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    }
+  }
+  
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:')) {
     return url;
   }
@@ -62,4 +113,9 @@ export function getVideoUrl(url: string | null | undefined): string {
   }
 
   return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+// Check if URL is a YouTube video
+export function isYouTubeUrl(url: string): boolean {
+  return url.includes('youtube.com') || url.includes('youtu.be');
 }

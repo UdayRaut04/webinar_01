@@ -16,8 +16,19 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000',
   },
-  // No experimental keys needed for now
-  experimental: {},
+  // Performance optimizations
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'framer-motion'],
+  },
+  // Enable SWC minification for faster builds
+  swcMinify: true,
+  // Enable compiler optimizations
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
+  // Optimize production builds
+  poweredByHeader: false,
+  compress: true,
 };
 
 module.exports = nextConfig;

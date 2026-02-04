@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
+import useSWR from 'swr';
 
 interface Webinar {
   id: string;
@@ -19,26 +20,22 @@ interface Webinar {
   };
 }
 
+const fetcher = async () => {
+  const { webinars } = await api.getAdminWebinars();
+  return webinars;
+};
+
 export default function WebinarsPage() {
-  const [webinars, setWebinars] = useState<Webinar[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadWebinars();
-  }, []);
-
-  const loadWebinars = async () => {
-    try {
-      const { webinars } = await api.getAdminWebinars();
-      setWebinars(webinars);
-    } catch (error) {
-      console.error('Failed to load webinars:', error);
-    } finally {
-      setLoading(false);
+  const { data: webinars, error, isLoading } = useSWR<Webinar[]>(
+    '/api/admin/webinars',
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      dedupingInterval: 30000, // Cache for 30 seconds
     }
-  };
+  );
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = useMemo(() => (status: string) => {
     switch (status) {
       case 'LIVE': return 'bg-green-100 text-green-700';
       case 'SCHEDULED': return 'bg-blue-100 text-blue-700';
@@ -46,9 +43,9 @@ export default function WebinarsPage() {
       case 'DRAFT': return 'bg-yellow-100 text-yellow-700';
       default: return 'bg-gray-100 text-gray-700';
     }
-  };
+  }, []);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -65,7 +62,7 @@ export default function WebinarsPage() {
         </Link>
       </div>
 
-      {webinars.length === 0 ? (
+      {webinars && webinars.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-gray-500 mb-4">No webinars yet</p>
@@ -76,7 +73,7 @@ export default function WebinarsPage() {
         </Card>
       ) : (
         <div className="grid gap-4">
-          {webinars.map((webinar) => (
+          {webinars?.map((webinar) => (
             <Card key={webinar.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

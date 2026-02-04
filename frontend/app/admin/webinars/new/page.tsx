@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { generateSlug, getVideoUrl } from '@/lib/utils';
+import { generateSlug, getVideoUrl, isYouTubeUrl } from '@/lib/utils';
 import { useRef } from 'react';
 
 export default function NewWebinarPage() {
@@ -178,10 +178,15 @@ export default function NewWebinarPage() {
                   <div className="flex-1">
                     <Input
                       label="Video Source"
-                      placeholder="https://example.com/video.mp4 or /uploads/..."
+                      placeholder="YouTube, local file path, or upload URL..."
                       value={formData.videoUrl}
                       onChange={(e) => setFormData({ ...formData, videoUrl: e.target.value })}
                     />
+                    {formData.videoUrl && isYouTubeUrl(formData.videoUrl) && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        💡 Tip: Original audio will be used. To specify language, add <code className="bg-gray-100 px-1 rounded">?hl=es</code> (or your language code) to the URL
+                      </p>
+                    )}
                   </div>
                   <input
                     type="file"
@@ -235,11 +240,30 @@ export default function NewWebinarPage() {
                 {formData.videoUrl && (
                   <div className="mt-2 text-sm">
                     <p className="text-gray-500 mb-1">Preview:</p>
-                    <video
-                      src={getVideoUrl(formData.videoUrl)}
-                      className="w-full aspect-video bg-black rounded border"
-                      controls
-                    />
+                    {formData.videoUrl.includes('drive.google.com') && (
+                      <div className="mb-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                        ⚠️ <strong>Google Drive Notice:</strong> Ensure the file is set to "Anyone with the link can view" for it to work. 
+                        For best results, consider uploading the video directly or using a dedicated video hosting service.
+                      </div>
+                    )}
+                    {isYouTubeUrl(formData.videoUrl) ? (
+                      <iframe
+                        src={getVideoUrl(formData.videoUrl)}
+                        className="w-full aspect-video bg-black rounded border"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={getVideoUrl(formData.videoUrl)}
+                        className="w-full aspect-video bg-black rounded border"
+                        controls
+                        onError={(e) => {
+                          const target = e.target as HTMLVideoElement;
+                          console.error('Video load error:', target.error);
+                        }}
+                      />
+                    )}
                   </div>
                 )}
               </div>
