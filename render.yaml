@@ -1,0 +1,25 @@
+# Render Blueprint - Infrastructure as Code
+# This file allows one-click deployment on Render
+
+services:
+  # Backend API Service
+  - type: web
+    name: webinar-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false # Set manually - Supabase PostgreSQL URL
+      - key: REDIS_URL
+        sync: false # Set manually - Upstash Redis URL
+      - key: JWT_SECRET
+        generateValue: true # Render will auto-generate a secure value

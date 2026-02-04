@@ -6,6 +6,7 @@ import cors from 'cors';
 import http from 'http';
 import { Server } from 'socket.io';
 import { PrismaClient } from '@prisma/client';
+import Redis from 'ioredis';
 import RedisMock from 'ioredis-mock';
 
 // Route imports
@@ -21,8 +22,10 @@ import { SchedulerService } from './services/scheduler';
 // Initialize Prisma
 export const prisma = new PrismaClient();
 
-// Initialize Redis (using mock for local dev)
-export const redis = new RedisMock();
+// Initialize Redis - use real Redis in production, mock for local dev
+export const redis = process.env.REDIS_URL
+  ? new Redis(process.env.REDIS_URL)
+  : new RedisMock();
 
 // Create Express app
 const app = express();
@@ -31,7 +34,7 @@ const server = http.createServer(app);
 // Initialize Socket.io
 export const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -39,7 +42,7 @@ export const io = new Server(server, {
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
   credentials: true,
 }));
 app.use(express.json());
@@ -87,10 +90,16 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 // Start server
 const PORT = process.env.PORT || 4000;
 
+const HOST = process.env.HOST || 'localhost';
+
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on http://${HOST}:${PORT}`);
   console.log(`📡 WebSocket server ready`);
   console.log(`🗄️  Database connected`);
+  if (HOST === '0.0.0.0') {
+    console.log(`🔗 Network access available at: http://192.168.1.43:${PORT}`);
+    console.log(`👥 Share this with your HR manager`);
+  }
 });
 
 // Graceful shutdown
